@@ -33,16 +33,23 @@ public class ServiceWorker extends Thread {
             this.outputStream = clientSocket.getOutputStream();
             BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream));
             String input;
+
             while ((input = bufferedReader.readLine()) != null) {
                 String[] tokens = StringUtils.split(input);
                 if (tokens != null && tokens.length > 0) {
                     String command = tokens[0];
                     if ("logoff".equalsIgnoreCase(command) || "quit".equalsIgnoreCase(command) || "exit".equalsIgnoreCase(command)) {
+                        //Format: command
                         handleLogoff();
                         break;
                     } else if ("login".equalsIgnoreCase(command)) {
+                        //Format: command name password
                         handleLogin(outputStream, tokens);
-                    } else {
+                    } else if ("msg".equalsIgnoreCase(command)){
+                        //Format: command to message
+                        handleMessage(tokens);
+                    }
+                    else {
                         String message = "unknown: " + command + System.lineSeparator();
                         outputStream.write(message.getBytes());
                     }
@@ -55,7 +62,24 @@ public class ServiceWorker extends Thread {
         }
     }
 
+    private void handleMessage(String[] tokens) throws IOException {
+        String to = tokens[1];
+        StringBuilder message = new StringBuilder();
+        for (int i = 2; i < tokens.length; i++){
+            message.append(tokens[i]).append(" ");
+        }
+
+        List<ServiceWorker> workers = server.getWorkers();
+        for (ServiceWorker serviceWorker : workers) {
+            if (to.equalsIgnoreCase(serviceWorker.getLogin())){
+                String output = "msg " + login + " " + message + System.lineSeparator();
+                serviceWorker.send(output);
+            }
+        }
+    }
+
     private void handleLogoff() throws IOException {
+        server.removeWorker(this);
         clientSocket.close();
         List<ServiceWorker> workers = server.getWorkers();
         //send other users the newly logged off user

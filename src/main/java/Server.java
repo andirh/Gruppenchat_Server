@@ -9,7 +9,7 @@ public class Server extends Thread {
 
     private final int port;
 
-    private List<ServiceWorker> workers = new ArrayList<>();
+    private final List<ServiceWorker> workers = new ArrayList<>();
 
     public Server(int port) {
         this.port = port;
@@ -35,5 +35,9 @@ public class Server extends Thread {
             System.out.println("exception");
             e.printStackTrace();
         }
+    }
+
+    public void removeWorker(ServiceWorker serviceWorker) {
+        workers.remove(serviceWorker);
     }
 }
