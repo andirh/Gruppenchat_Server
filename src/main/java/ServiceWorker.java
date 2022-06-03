@@ -66,7 +66,11 @@ public class ServiceWorker extends Thread {
 
             clientSocket.close();
         } catch (IOException e) {
-            e.printStackTrace();
+            try {
+                handleLogoff();
+            } catch (IOException ioException) {
+                ioException.printStackTrace();
+            }
         }
     }
 
@@ -75,8 +79,8 @@ public class ServiceWorker extends Thread {
             String room = tokens[1];
             if (this.isMemberOfRoom(room)) {
                 rooms.remove(room);
-                String message = "You left the room " + room;
-                outputStream.write(message.getBytes());
+                String message = "You left the room " + room + System.lineSeparator();
+                send(message);
             }
         }
     }
@@ -89,8 +93,8 @@ public class ServiceWorker extends Thread {
         if (tokens.length > 1) {
             String room = tokens[1];
             rooms.add(room);
-            String message = "You joined the room " + room;
-            outputStream.write(message.getBytes());
+            String message = "You joined the room " + room + System.lineSeparator();
+            send(message);
         }
     }
 
@@ -132,11 +136,18 @@ public class ServiceWorker extends Thread {
     }
 
     private void handleLogin(OutputStream outputStream, String[] tokens) throws IOException {
-        if (tokens.length == 3) {
+        if (tokens.length == 2) {
             String name = tokens[1];
-            String password = tokens[2];
 
-            if ((name.equals("guest") && password.equals("guest")) || (name.equals("admin") && password.equals("admin"))) {
+            boolean nameAlreadyExists = false;
+
+            for (ServiceWorker serviceWorker : server.getWorkers()) {
+                if (serviceWorker.getLogin() != null && serviceWorker.getLogin().equals(name)) {
+                    nameAlreadyExists = true;
+                    break;
+                }
+            }
+            if (!nameAlreadyExists) {
                 String message = "Logged in as " + name + System.lineSeparator();
                 outputStream.write(message.getBytes());
                 this.login = name;
@@ -161,11 +172,16 @@ public class ServiceWorker extends Thread {
                 }
 
             } else {
-                String message = "Error occurred while logging in" + System.lineSeparator();
-                send(message);
+                String message = "This name already exists, please choose another one!" + System.lineSeparator();
+                outputStream.write(message.getBytes());
+                ;
             }
+        } else {
+            String message = "Error occurred while logging in" + System.lineSeparator();
+            send(message);
         }
     }
+
 
     private void send(String message) throws IOException {
         if (login != null) {
