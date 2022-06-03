@@ -2,6 +2,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.HashSet;
 import java.util.List;
 
 public class ServiceWorker extends Thread {
@@ -11,6 +12,7 @@ public class ServiceWorker extends Thread {
     private final Server server;
     private String login = null;
     private OutputStream outputStream;
+    private final HashSet<String> rooms = new HashSet<>();
 
     public ServiceWorker(Server server, Socket clientSocket) {
         this.server = server;
@@ -45,11 +47,17 @@ public class ServiceWorker extends Thread {
                     } else if ("login".equalsIgnoreCase(command)) {
                         //Format: command name password
                         handleLogin(outputStream, tokens);
-                    } else if ("msg".equalsIgnoreCase(command)){
+                    } else if ("join".equalsIgnoreCase(command)) {
+                        //Format: command room
+                        handleJoin(tokens);
+                    } else if ("leave".equalsIgnoreCase(command)) {
+                        //Format: command room
+                        handleLeave(tokens);
+                    } else if ("msg".equalsIgnoreCase(command)) {
                         //Format: command to message
-                        handleMessage(tokens);
-                    }
-                    else {
+                        //Format: command #toRoom message
+                        handleMessage(StringUtils.split(input, null, 3));
+                    } else {
                         String message = "unknown: " + command + System.lineSeparator();
                         outputStream.write(message.getBytes());
                     }
@@ -62,18 +70,50 @@ public class ServiceWorker extends Thread {
         }
     }
 
+    private void handleLeave(String[] tokens) throws IOException {
+        if (tokens.length > 1) {
+            String room = tokens[1];
+            if (this.isMemberOfRoom(room)) {
+                rooms.remove(room);
+                String message = "You left the room " + room;
+                outputStream.write(message.getBytes());
+            }
+        }
+    }
+
+    public boolean isMemberOfRoom(String room) {
+        return rooms.contains(room);
+    }
+
+    private void handleJoin(String[] tokens) throws IOException {
+        if (tokens.length > 1) {
+            String room = tokens[1];
+            rooms.add(room);
+            String message = "You joined the room " + room;
+            outputStream.write(message.getBytes());
+        }
+    }
+
     private void handleMessage(String[] tokens) throws IOException {
         String to = tokens[1];
-        StringBuilder message = new StringBuilder();
-        for (int i = 2; i < tokens.length; i++){
-            message.append(tokens[i]).append(" ");
-        }
+        String message = tokens[2];
+
+        boolean isRoomCommand = (to.charAt(0) == '#');
 
         List<ServiceWorker> workers = server.getWorkers();
         for (ServiceWorker serviceWorker : workers) {
-            if (to.equalsIgnoreCase(serviceWorker.getLogin())){
-                String output = "msg " + login + " " + message + System.lineSeparator();
-                serviceWorker.send(output);
+            if (isRoomCommand) {
+                if (this.isMemberOfRoom(to)) {
+                    if (serviceWorker.isMemberOfRoom(to)) {
+                        String output = "Room: " + to + " - Message from " + login + ": " + message + System.lineSeparator();
+                        serviceWorker.send(output);
+                    }
+                }
+            } else {
+                if (to.equalsIgnoreCase(serviceWorker.getLogin())) {
+                    String output = "Message from " + login + ": " + message + System.lineSeparator();
+                    serviceWorker.send(output);
+                }
             }
         }
     }
@@ -83,7 +123,7 @@ public class ServiceWorker extends Thread {
         clientSocket.close();
         List<ServiceWorker> workers = server.getWorkers();
         //send other users the newly logged off user
-        String onlineMessage = "disconnected: " + login + System.lineSeparator();
+        String onlineMessage = "User " + login + " disconnected" + System.lineSeparator();
         for (ServiceWorker serviceWorker : workers) {
             if (!login.equals(serviceWorker.getLogin())) {
                 serviceWorker.send(onlineMessage);
